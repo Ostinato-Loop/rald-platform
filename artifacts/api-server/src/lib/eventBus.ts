@@ -197,7 +197,7 @@ async function handleWalletProvision(payload: Record<string, unknown>): Promise<
     id: walletId,
     userId,
     balance: 0,
-    currency: "KES",
+    currency: "NGN",
     status: "active",
   });
 

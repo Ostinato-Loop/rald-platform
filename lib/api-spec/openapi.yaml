@@ -259,7 +259,7 @@ paths:
       operationId: walletCredit
       tags: [wallet]
       summary: Credit the authenticated user's wallet
-      description: Adds funds to the wallet. Amount is in minor units (e.g. KES cents).
+      description: Adds funds to the wallet. Amount is in minor units (e.g. NGN kobo).
       security:
         - bearerAuth: []
       requestBody:
@@ -272,8 +272,8 @@ paths:
               example:
                 value:
                   amount: 10000
-                  currency: KES
-                  description: Top-up from M-Pesa
+                  currency: NGN
+                  description: Top-up from Bank Transfer
       responses:
         "201":
           description: Wallet credited
@@ -878,6 +878,93 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/admin:
+    get:
+      operationId: adminUserList
+      tags: [identity]
+      summary: Admin — list all users with filters and pagination
+      description: |
+        Returns a paginated list of all RALD identities.
+        Password hashes are never included in the response.
+        Supports filtering by role, suspension status, KYC tier, and registration date range.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [user, admin]
+          description: Filter by user role
+        - name: suspended
+          in: query
+          schema:
+            type: string
+            enum: ["true", "false"]
+          description: Filter by suspension status — "true" for suspended users only, "false" for active only
+        - name: kycTier
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+          description: Filter by KYC tier (1=basic, 2=verified, 3=enhanced)
+        - name: createdAfter
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Return users created at or after this ISO 8601 timestamp
+          example: "2026-01-01T00:00:00Z"
+        - name: createdBefore
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Return users created at or before this ISO 8601 timestamp
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, username, trustScore, kycTier]
+            default: createdAt
+        - name: sortDir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated user list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1323,7 +1410,7 @@ components:
 
     RALDWallet:
       type: object
-      description: PayRald wallet record. Balance is stored in minor units (e.g. KES cents).
+      description: PayRald wallet record. Balance is stored in minor units (e.g. NGN kobo).
       properties:
         id:
           type: string
@@ -1335,7 +1422,7 @@ components:
           example: rld_8dj39sj29k
         balance:
           type: integer
-          description: Current balance in minor units (e.g. 10000 = 100.00 KES)
+          description: Current balance in minor units (e.g. 10000 = 100.00 NGN)
           example: 10000
         currency:
           type: string
@@ -1380,7 +1467,7 @@ components:
           example: 5000
         currency:
           type: string
-          example: KES
+          example: NGN
         reference:
           type: string
           description: Unique idempotency key for this transaction
@@ -1434,17 +1521,17 @@ components:
           example: 10000
         currency:
           type: string
-          default: KES
-          example: KES
+          default: NGN
+          example: NGN
         reference:
           type: string
           maxLength: 128
           description: Optional idempotency key — generated if omitted
-          example: mpesa_tx_abc123
+          example: bank_tx_abc123
         description:
           type: string
           maxLength: 255
-          example: Top-up from M-Pesa
+          example: Top-up from Bank Transfer
       required:
         - amount
 
@@ -1458,8 +1545,8 @@ components:
           example: 2000
         currency:
           type: string
-          default: KES
-          example: KES
+          default: NGN
+          example: NGN
         reference:
           type: string
           maxLength: 128
@@ -1498,8 +1585,8 @@ components:
           example: 5000
         currency:
           type: string
-          default: KES
-          example: KES
+          default: NGN
+          example: NGN
         description:
           type: string
           maxLength: 255
@@ -1525,6 +1612,87 @@ components:
         - senderBalance
         - transaction
         - to
+
+    AdminUserItem:
+      type: object
+      description: A RALD identity record as seen by an admin. Never includes password hash.
+      properties:
+        id:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        email:
+          type: string
+          format: email
+          example: boyd@example.com
+        raldEmail:
+          type: string
+          nullable: true
+          example: boyd@rald.cloud
+        aliasHandle:
+          type: string
+          nullable: true
+          example: boyd@rald
+        walletId:
+          type: string
+          nullable: true
+          example: wallet_rld_8dj39sj29k
+        role:
+          type: string
+          enum: [user, admin]
+          example: user
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 0
+        kycTier:
+          type: integer
+          minimum: 1
+          maximum: 3
+          example: 1
+        activatedProducts:
+          type: array
+          items:
+            type: string
+          example: [payrald]
+        suspended:
+          type: string
+          nullable: true
+          description: Suspension reason, or null if active
+          example: null
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - username
+        - email
+        - role
+        - trustScore
+        - kycTier
+        - activatedProducts
+        - createdAt
+        - updatedAt
+
+    AdminUserListResponse:
+      type: object
+      description: Paginated list of RALD users returned by the admin user list endpoint.
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUserItem"
+        pagination:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - users
+        - pagination
 
     PaginationMeta:
       type: object

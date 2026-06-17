@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
-import { eq, or } from "drizzle-orm";
+import { eq, or, and, gte, lte, sql, isNotNull, isNull } from "drizzle-orm";
 import { db, raldUsersTable, raldAliasesTable } from "@workspace/db";
 import type { AliasResolution } from "@workspace/db";
 import {
@@ -17,7 +17,7 @@ import {
   publishIdentityUpdated,
   publishIdentitySuspended,
 } from "../lib/events";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -316,6 +316,90 @@ router.post("/suspend", requireAuth, async (req: Request, res: Response) => {
   );
 
   res.json({ ok: true });
+});
+
+const adminUserListSchema = z.object({
+  role: z.enum(["user", "admin"]).optional(),
+  suspended: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .optional(),
+  kycTier: z.coerce.number().int().min(1).max(3).optional(),
+  createdAfter: z.string().datetime({ offset: true }).optional(),
+  createdBefore: z.string().datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  sortBy: z.enum(["createdAt", "username", "trustScore", "kycTier"]).default("createdAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
+});
+
+router.get("/admin", requireAdmin, async (req: Request, res: Response) => {
+  const parsed = adminUserListSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid query params", issues: parsed.error.issues });
+    return;
+  }
+
+  const { role, suspended, kycTier, createdAfter, createdBefore, limit, offset, sortBy, sortDir } =
+    parsed.data;
+
+  const filters = [];
+  if (role) filters.push(eq(raldUsersTable.role, role));
+  if (kycTier !== undefined) filters.push(eq(raldUsersTable.kycTier, kycTier));
+  if (createdAfter) filters.push(gte(raldUsersTable.createdAt, new Date(createdAfter)));
+  if (createdBefore) filters.push(lte(raldUsersTable.createdAt, new Date(createdBefore)));
+  if (suspended === true) filters.push(isNotNull(raldUsersTable.suspended));
+  if (suspended === false) filters.push(isNull(raldUsersTable.suspended));
+
+  const whereClause = filters.length > 0 ? and(...filters) : undefined;
+
+  const col =
+    sortBy === "username" ? raldUsersTable.username :
+    sortBy === "trustScore" ? raldUsersTable.trustScore :
+    sortBy === "kycTier" ? raldUsersTable.kycTier :
+    raldUsersTable.createdAt;
+
+  const orderClause = sortDir === "asc" ? sql`${col} asc` : sql`${col} desc`;
+
+  const [users, [countRow]] = await Promise.all([
+    db
+      .select({
+        id: raldUsersTable.id,
+        username: raldUsersTable.username,
+        email: raldUsersTable.email,
+        raldEmail: raldUsersTable.raldEmail,
+        aliasHandle: raldUsersTable.aliasHandle,
+        walletId: raldUsersTable.walletId,
+        role: raldUsersTable.role,
+        trustScore: raldUsersTable.trustScore,
+        kycTier: raldUsersTable.kycTier,
+        activatedProducts: raldUsersTable.activatedProducts,
+        suspended: raldUsersTable.suspended,
+        createdAt: raldUsersTable.createdAt,
+        updatedAt: raldUsersTable.updatedAt,
+      })
+      .from(raldUsersTable)
+      .where(whereClause)
+      .orderBy(orderClause)
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(raldUsersTable)
+      .where(whereClause),
+  ]);
+
+  const total = countRow?.total ?? 0;
+
+  res.json({
+    users,
+    pagination: {
+      total,
+      limit,
+      offset,
+      hasMore: offset + users.length < total,
+    },
+  });
 });
 
 export default router;

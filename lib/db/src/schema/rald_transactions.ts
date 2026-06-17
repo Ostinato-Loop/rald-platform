@@ -13,7 +13,7 @@ export const raldTransactionsTable = pgTable(
     walletId: text("wallet_id").notNull(),
     type: text("type").$type<TxType>().notNull(),
     amount: integer("amount").notNull(),
-    currency: text("currency").notNull().default("KES"),
+    currency: text("currency").notNull().default("NGN"),
     reference: text("reference").notNull().unique(),
     description: text("description"),
     fromWalletId: text("from_wallet_id"),

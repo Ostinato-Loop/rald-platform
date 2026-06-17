@@ -9,7 +9,7 @@ export const raldWalletsTable = pgTable(
     id: text("id").primaryKey(),
     userId: text("user_id").notNull().unique(),
     balance: integer("balance").notNull().default(0),
-    currency: text("currency").notNull().default("KES"),
+    currency: text("currency").notNull().default("NGN"),
     status: text("status").$type<WalletStatus>().notNull().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -66,7 +66,7 @@ router.get("/transactions", requireAuth, async (req: Request, res: Response) => 
 
 const creditSchema = z.object({
   amount: z.number().int().min(1),
-  currency: z.string().length(3).default("KES"),
+  currency: z.string().length(3).default("NGN"),
   reference: z.string().min(1).max(128).optional(),
   description: z.string().max(255).optional(),
 });
@@ -124,7 +124,7 @@ router.post("/credit", requireAuth, async (req: Request, res: Response) => {
 
 const debitSchema = z.object({
   amount: z.number().int().min(1),
-  currency: z.string().length(3).default("KES"),
+  currency: z.string().length(3).default("NGN"),
   reference: z.string().min(1).max(128).optional(),
   description: z.string().max(255).optional(),
 });
@@ -192,7 +192,7 @@ router.post("/debit", requireAuth, async (req: Request, res: Response) => {
 const transferSchema = z.object({
   to: z.string().min(3),
   amount: z.number().int().min(1),
-  currency: z.string().length(3).default("KES"),
+  currency: z.string().length(3).default("NGN"),
   description: z.string().max(255).optional(),
 });
 
