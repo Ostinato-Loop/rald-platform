@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { db, raldWalletsTable, raldTransactionsTable, raldAliasesTable } from "@workspace/db";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { logger } from "../lib/logger";
@@ -316,6 +316,66 @@ router.post("/transfer", requireAuth, async (req: Request, res: Response) => {
     senderBalance: senderWallet.balance - amount,
     transaction: outTx,
     to: aliasLookup,
+  });
+});
+
+const adminListSchema = z.object({
+  status: z.enum(["active", "frozen", "closed"]).optional(),
+  minBalance: z.coerce.number().int().min(0).optional(),
+  maxBalance: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  sortBy: z.enum(["createdAt", "balance", "updatedAt"]).default("createdAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
+});
+
+router.get("/admin", requireAdmin, async (req: Request, res: Response) => {
+  const parsed = adminListSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid query params", issues: parsed.error.issues });
+    return;
+  }
+
+  const { status, minBalance, maxBalance, limit, offset, sortBy, sortDir } = parsed.data;
+
+  const filters = [];
+  if (status) filters.push(eq(raldWalletsTable.status, status));
+  if (minBalance !== undefined) filters.push(gte(raldWalletsTable.balance, minBalance));
+  if (maxBalance !== undefined) filters.push(lte(raldWalletsTable.balance, maxBalance));
+
+  const whereClause = filters.length > 0 ? and(...filters) : undefined;
+
+  const col =
+    sortBy === "balance" ? raldWalletsTable.balance :
+    sortBy === "updatedAt" ? raldWalletsTable.updatedAt :
+    raldWalletsTable.createdAt;
+
+  const orderClause = sortDir === "asc" ? sql`${col} asc` : sql`${col} desc`;
+
+  const [wallets, [countRow]] = await Promise.all([
+    db
+      .select()
+      .from(raldWalletsTable)
+      .where(whereClause)
+      .orderBy(orderClause)
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(raldWalletsTable)
+      .where(whereClause),
+  ]);
+
+  const total = countRow?.total ?? 0;
+
+  res.json({
+    wallets,
+    pagination: {
+      total,
+      limit,
+      offset,
+      hasMore: offset + wallets.length < total,
+    },
   });
 });
 

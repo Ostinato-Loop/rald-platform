@@ -324,6 +324,78 @@ paths:
               schema:
                 $ref: "#/components/schemas/InsufficientFundsError"
 
+  /wallet/admin:
+    get:
+      operationId: adminWalletList
+      tags: [wallet]
+      summary: Admin — list all wallets with filters and pagination
+      description: |
+        Returns a paginated list of wallets across all users.
+        Supports filtering by status, balance range, and sorting by any wallet field.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, frozen, closed]
+          description: Filter by wallet status
+        - name: minBalance
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+          description: Minimum balance (inclusive, minor units)
+        - name: maxBalance
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+          description: Maximum balance (inclusive, minor units)
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, balance, updatedAt]
+            default: createdAt
+        - name: sortDir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated wallet list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWalletListResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /wallet/admin/{walletId}:
     get:
       operationId: adminWalletGet
@@ -1453,6 +1525,46 @@ components:
         - senderBalance
         - transaction
         - to
+
+    PaginationMeta:
+      type: object
+      description: Pagination metadata included in list responses.
+      properties:
+        total:
+          type: integer
+          description: Total number of matching records across all pages
+          example: 142
+        limit:
+          type: integer
+          description: Page size used for this request
+          example: 50
+        offset:
+          type: integer
+          description: Starting position of this page
+          example: 0
+        hasMore:
+          type: boolean
+          description: Whether more records exist beyond this page
+          example: true
+      required:
+        - total
+        - limit
+        - offset
+        - hasMore
+
+    AdminWalletListResponse:
+      type: object
+      description: Paginated list of wallets returned by the admin list endpoint.
+      properties:
+        wallets:
+          type: array
+          items:
+            $ref: "#/components/schemas/RALDWallet"
+        pagination:
+          $ref: "#/components/schemas/PaginationMeta"
+      required:
+        - wallets
+        - pagination
 
     AdminWalletResponse:
       type: object
