@@ -958,6 +958,63 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/admin/kyc/pending:
+    get:
+      operationId: adminKycPendingQueue
+      tags: [identity]
+      summary: Admin — list users with pending KYC documents
+      description: |
+        Returns a paginated list of users who have submitted KYC documents
+        (`kycDocuments` is non-empty). These are users awaiting compliance review
+        via `POST /identity/admin/:userId/set-kyc-tier`.
+
+        Sorted by most recently updated first (typically the most recent document submission).
+        Optionally filter by current `kycTier` (e.g. `?kycTier=1` for all tier-1 users with docs).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: kycTier
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+          description: Filter by the user's current KYC tier
+          example: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Paginated list of users with pending KYC submissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycPendingQueueResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/admin/{userId}/set-kyc-tier:
     post:
       operationId: adminSetKycTier
@@ -1909,6 +1966,67 @@ components:
         - senderBalance
         - transaction
         - to
+
+    KycPendingUser:
+      type: object
+      description: A user entry in the KYC compliance review queue
+      properties:
+        id:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        email:
+          type: string
+          example: boyd@example.com
+        kycTier:
+          type: integer
+          description: Current approved tier (not yet the requested tier)
+          example: 1
+        kycDocuments:
+          type: array
+          items:
+            $ref: "#/components/schemas/KycDocument"
+          description: All documents submitted by this user across all requests
+        kycDocumentsCount:
+          type: integer
+          description: Convenience count of submitted documents
+          example: 2
+        latestDocumentAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: ISO timestamp of the most recently submitted document
+          example: "2026-06-17T10:30:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - username
+        - email
+        - kycTier
+        - kycDocuments
+        - kycDocumentsCount
+        - updatedAt
+        - createdAt
+
+    KycPendingQueueResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/KycPendingUser"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+      required:
+        - users
+        - pagination
 
     SetKycTierRequest:
       type: object

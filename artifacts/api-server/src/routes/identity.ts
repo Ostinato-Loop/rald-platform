@@ -471,6 +471,75 @@ router.get("/admin", requireAdmin, async (req: Request, res: Response) => {
   });
 });
 
+const kycPendingQuerySchema = z.object({
+  kycTier: z.coerce.number().int().min(1).max(3).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+router.get("/admin/kyc/pending", requireAdmin, async (req: Request, res: Response) => {
+  const parsed = kycPendingQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid query params", issues: parsed.error.issues });
+    return;
+  }
+
+  const { kycTier, limit, offset } = parsed.data;
+
+  const filters: ReturnType<typeof eq>[] = [
+    sql`jsonb_array_length(${raldUsersTable.kycDocuments}) > 0` as unknown as ReturnType<typeof eq>,
+  ];
+  if (kycTier !== undefined) filters.push(eq(raldUsersTable.kycTier, kycTier));
+
+  const whereClause = and(...filters);
+
+  const [users, [countRow]] = await Promise.all([
+    db
+      .select({
+        id: raldUsersTable.id,
+        username: raldUsersTable.username,
+        email: raldUsersTable.email,
+        kycTier: raldUsersTable.kycTier,
+        kycDocuments: raldUsersTable.kycDocuments,
+        updatedAt: raldUsersTable.updatedAt,
+        createdAt: raldUsersTable.createdAt,
+      })
+      .from(raldUsersTable)
+      .where(whereClause)
+      .orderBy(sql`${raldUsersTable.updatedAt} desc`)
+      .limit(limit)
+      .offset(offset),
+    db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(raldUsersTable)
+      .where(whereClause),
+  ]);
+
+  const total = countRow?.total ?? 0;
+
+  const enriched = users.map((u) => ({
+    ...u,
+    kycDocumentsCount: Array.isArray(u.kycDocuments) ? u.kycDocuments.length : 0,
+    latestDocumentAt:
+      Array.isArray(u.kycDocuments) && u.kycDocuments.length > 0
+        ? u.kycDocuments.reduce((latest, d) =>
+            d.submittedAt > latest ? d.submittedAt : latest,
+            u.kycDocuments[0]!.submittedAt,
+          )
+        : null,
+  }));
+
+  res.json({
+    users: enriched,
+    pagination: {
+      total,
+      limit,
+      offset,
+      hasMore: offset + users.length < total,
+    },
+  });
+});
+
 router.get("/:username/profile", async (req: Request, res: Response) => {
   const raw = req.params["username"];
   const username = (Array.isArray(raw) ? raw[0]! : raw!).toLowerCase().trim();
