@@ -541,6 +541,26 @@ router.get("/admin/kyc/pending", requireAdmin, async (req: Request, res: Respons
   });
 });
 
+router.get("/admin/:userId", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["userId"];
+  const targetId = Array.isArray(raw) ? raw[0]! : raw!;
+
+  const [user] = await db
+    .select()
+    .from(raldUsersTable)
+    .where(eq(raldUsersTable.id, targetId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: `User "${targetId}" not found` });
+    return;
+  }
+
+  const { passwordHash: _omit, ...safeUser } = user;
+
+  res.json(safeUser);
+});
+
 router.get("/:username/profile", async (req: Request, res: Response) => {
   const raw = req.params["username"];
   const username = (Array.isArray(raw) ? raw[0]! : raw!).toLowerCase().trim();
