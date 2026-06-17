@@ -29,3 +29,13 @@ export type {
   AliasResolveResult,
   UseALIAResolveReturn,
 } from "./hooks/useALIAResolve";
+
+export { useRALDWallet, setWalletBaseUrl } from "./hooks/useRALDWallet";
+export type {
+  RALDWallet,
+  RALDTransaction,
+  CreditInput,
+  DebitInput,
+  TransferInput,
+  UseRALDWalletReturn,
+} from "./hooks/useRALDWallet";

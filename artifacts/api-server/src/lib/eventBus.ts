@@ -1,5 +1,5 @@
 import { eq, and, lt } from "drizzle-orm";
-import { db, raldEventsTable, raldAliasesTable, raldUsersTable } from "@workspace/db";
+import { db, raldEventsTable, raldAliasesTable, raldUsersTable, raldWalletsTable } from "@workspace/db";
 import type { RaldEvent } from "@workspace/db";
 import type { AliasResolution } from "@workspace/db";
 import { logger } from "./logger";
@@ -178,10 +178,30 @@ async function handleWalletProvision(payload: Record<string, unknown>): Promise<
   const userId = payload["userId"] as string;
   const walletId = payload["walletId"] as string;
 
-  logger.info(
-    { userId, walletId },
-    "[stub] wallet.provision_requested — PayRald wallet service would be called here",
-  );
+  if (!userId || !walletId) {
+    throw new Error("wallet.provision_requested missing userId or walletId");
+  }
+
+  const [existing] = await db
+    .select({ id: raldWalletsTable.id })
+    .from(raldWalletsTable)
+    .where(eq(raldWalletsTable.id, walletId))
+    .limit(1);
+
+  if (existing) {
+    logger.info({ walletId }, "Wallet already exists — provision is a no-op");
+    return;
+  }
+
+  await db.insert(raldWalletsTable).values({
+    id: walletId,
+    userId,
+    balance: 0,
+    currency: "KES",
+    status: "active",
+  });
+
+  logger.info({ userId, walletId }, "PayRald wallet provisioned via event bus");
 }
 
 async function handleMailProvision(payload: Record<string, unknown>): Promise<void> {

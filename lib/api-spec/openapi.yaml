@@ -19,6 +19,8 @@ tags:
     description: ALIA Universal Routing — resolve and manage RALD alias handles
   - name: events
     description: RALD Event Bus — observe and manage the internal event stream
+  - name: wallet
+    description: PayRald Wallet — balance, transactions, and transfers via ALIA handles
 
 paths:
   /healthz:
@@ -197,6 +199,178 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /wallet:
+    get:
+      operationId: walletGet
+      tags: [wallet]
+      summary: Get the authenticated user's PayRald wallet
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Wallet record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RALDWallet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Wallet not found (not yet provisioned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wallet/transactions:
+    get:
+      operationId: walletListTransactions
+      tags: [wallet]
+      summary: List transactions for the authenticated user's wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /wallet/credit:
+    post:
+      operationId: walletCredit
+      tags: [wallet]
+      summary: Credit the authenticated user's wallet
+      description: Adds funds to the wallet. Amount is in minor units (e.g. KES cents).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreditRequest"
+            examples:
+              example:
+                value:
+                  amount: 10000
+                  currency: KES
+                  description: Top-up from M-Pesa
+      responses:
+        "201":
+          description: Wallet credited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletMutationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Wallet is frozen or closed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wallet/debit:
+    post:
+      operationId: walletDebit
+      tags: [wallet]
+      summary: Debit the authenticated user's wallet
+      description: Deducts funds from the wallet. Returns 422 if balance is insufficient.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DebitRequest"
+      responses:
+        "201":
+          description: Wallet debited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletMutationResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsufficientFundsError"
+
+  /wallet/transfer:
+    post:
+      operationId: walletTransfer
+      tags: [wallet]
+      summary: Transfer funds to another RALD user via ALIA handle
+      description: |
+        Transfers from the authenticated user's wallet to the recipient's wallet.
+        The `to` field accepts an ALIA handle (`boyd@rald`) or bare username (`boyd`).
+        Both wallets must be active. Creates paired transfer_out / transfer_in transactions.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferRequest"
+            examples:
+              alia_handle:
+                summary: Transfer via ALIA handle
+                value:
+                  to: boyd@rald
+                  amount: 5000
+                  description: Lunch split
+      responses:
+        "201":
+          description: Transfer completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Sender or recipient wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Insufficient funds or invalid transfer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsufficientFundsError"
 
   /events:
     get:
@@ -944,3 +1118,239 @@ components:
           example: archived
       required:
         - status
+
+    RALDWallet:
+      type: object
+      description: PayRald wallet record. Balance is stored in minor units (e.g. KES cents).
+      properties:
+        id:
+          type: string
+          description: Wallet ID — format `wallet_rld_xxxxxxxxxx`
+          example: wallet_rld_8dj39sj29k
+        userId:
+          type: string
+          description: Owning RALD user ID
+          example: rld_8dj39sj29k
+        balance:
+          type: integer
+          description: Current balance in minor units (e.g. 10000 = 100.00 KES)
+          example: 10000
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: KES
+        status:
+          type: string
+          enum: [active, frozen, closed]
+          example: active
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - balance
+        - currency
+        - status
+        - createdAt
+        - updatedAt
+
+    RALDTransaction:
+      type: object
+      description: A single ledger entry on a PayRald wallet.
+      properties:
+        id:
+          type: string
+          format: uuid
+        walletId:
+          type: string
+          description: Wallet this transaction belongs to
+        type:
+          type: string
+          enum: [credit, debit, transfer_in, transfer_out]
+          example: credit
+        amount:
+          type: integer
+          description: Transaction amount in minor units
+          example: 5000
+        currency:
+          type: string
+          example: KES
+        reference:
+          type: string
+          description: Unique idempotency key for this transaction
+          example: ref_a1b2c3d4e5f6g7h8
+        description:
+          type: string
+          nullable: true
+          example: Top-up from M-Pesa
+        fromWalletId:
+          type: string
+          nullable: true
+          description: Source wallet ID for transfers
+        toWalletId:
+          type: string
+          nullable: true
+          description: Destination wallet ID for transfers
+        status:
+          type: string
+          enum: [completed, failed, pending]
+          example: completed
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - walletId
+        - type
+        - amount
+        - currency
+        - reference
+        - status
+        - createdAt
+
+    TransactionListResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RALDTransaction"
+      required:
+        - transactions
+
+    CreditRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount in minor units
+          example: 10000
+        currency:
+          type: string
+          default: KES
+          example: KES
+        reference:
+          type: string
+          maxLength: 128
+          description: Optional idempotency key — generated if omitted
+          example: mpesa_tx_abc123
+        description:
+          type: string
+          maxLength: 255
+          example: Top-up from M-Pesa
+      required:
+        - amount
+
+    DebitRequest:
+      type: object
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount in minor units
+          example: 2000
+        currency:
+          type: string
+          default: KES
+          example: KES
+        reference:
+          type: string
+          maxLength: 128
+          example: checkout_order_9876
+        description:
+          type: string
+          maxLength: 255
+          example: Payment to merchant
+      required:
+        - amount
+
+    WalletMutationResponse:
+      type: object
+      properties:
+        balance:
+          type: integer
+          description: New wallet balance after the operation
+          example: 15000
+        transaction:
+          $ref: "#/components/schemas/RALDTransaction"
+      required:
+        - balance
+        - transaction
+
+    TransferRequest:
+      type: object
+      properties:
+        to:
+          type: string
+          description: Recipient ALIA handle (`boyd@rald`) or bare username (`boyd`)
+          example: boyd@rald
+        amount:
+          type: integer
+          minimum: 1
+          description: Amount in minor units
+          example: 5000
+        currency:
+          type: string
+          default: KES
+          example: KES
+        description:
+          type: string
+          maxLength: 255
+          example: Lunch split
+      required:
+        - to
+        - amount
+
+    TransferResponse:
+      type: object
+      properties:
+        senderBalance:
+          type: integer
+          description: Sender's new balance after transfer
+          example: 5000
+        transaction:
+          $ref: "#/components/schemas/RALDTransaction"
+        to:
+          type: string
+          description: Resolved recipient ALIA handle
+          example: boyd@rald
+      required:
+        - senderBalance
+        - transaction
+        - to
+
+    InsufficientFundsError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Insufficient funds
+        balance:
+          type: integer
+          description: Current wallet balance
+          example: 3000
+        required:
+          type: integer
+          description: Amount that was requested
+          example: 5000
+      required:
+        - error
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request body failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
