@@ -402,4 +402,55 @@ router.get("/admin", requireAdmin, async (req: Request, res: Response) => {
   });
 });
 
+const setRoleSchema = z.object({
+  role: z.enum(["user", "admin"]),
+});
+
+router.post("/admin/:userId/set-role", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["userId"];
+  const targetId = Array.isArray(raw) ? raw[0]! : raw!;
+  const adminId = req.jwtPayload!.sub;
+
+  const parsed = setRoleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
+    return;
+  }
+
+  const { role } = parsed.data;
+
+  if (targetId === adminId) {
+    res.status(422).json({ error: "An admin cannot change their own role" });
+    return;
+  }
+
+  const [user] = await db
+    .select({ id: raldUsersTable.id, username: raldUsersTable.username, role: raldUsersTable.role })
+    .from(raldUsersTable)
+    .where(eq(raldUsersTable.id, targetId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: `User "${targetId}" not found` });
+    return;
+  }
+
+  if (user.role === role) {
+    res.json({ message: `User is already "${role}"`, userId: targetId, role });
+    return;
+  }
+
+  await db
+    .update(raldUsersTable)
+    .set({ role, updatedAt: new Date() })
+    .where(eq(raldUsersTable.id, targetId));
+
+  logger.info(
+    { adminId, targetId, username: user.username, previousRole: user.role, newRole: role },
+    "Admin changed user role",
+  );
+
+  res.json({ userId: targetId, username: user.username, previousRole: user.role, role });
+});
+
 export default router;

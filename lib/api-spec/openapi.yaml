@@ -878,6 +878,71 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/admin/{userId}/set-role:
+    post:
+      operationId: adminSetUserRole
+      tags: [identity]
+      summary: Admin — promote or demote a user's role
+      description: |
+        Changes a user's role between `user` and `admin`.
+        Idempotent — returns 200 if the user already has the requested role.
+        An admin cannot change their own role (returns 422).
+        Emits no event — role changes take effect on the user's next login.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Target user's RALD ID
+          example: rld_8dj39sj29k
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetRoleRequest"
+            examples:
+              promote:
+                summary: Promote to admin
+                value:
+                  role: admin
+              demote:
+                summary: Demote to user
+                value:
+                  role: user
+      responses:
+        "200":
+          description: Role updated (or was already the requested role)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetRoleResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Admin tried to change their own role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/admin:
     get:
       operationId: adminUserList
@@ -1612,6 +1677,44 @@ components:
         - senderBalance
         - transaction
         - to
+
+    SetRoleRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, admin]
+          description: The new role to assign
+          example: admin
+      required:
+        - role
+
+    SetRoleResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        previousRole:
+          type: string
+          enum: [user, admin]
+          description: The role before this change (omitted if already at requested role)
+          example: user
+        role:
+          type: string
+          enum: [user, admin]
+          description: The role now in effect
+          example: admin
+        message:
+          type: string
+          description: Present only when already at requested role (idempotent no-op)
+          example: User is already "admin"
+      required:
+        - userId
+        - role
 
     AdminUserItem:
       type: object
