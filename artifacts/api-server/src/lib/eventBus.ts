@@ -122,6 +122,18 @@ async function dispatch(event: RaldEvent): Promise<void> {
       logger.info({ userId: payload["userId"] }, "[fan-out] identity.reactivated received");
       break;
 
+    case "identity.kyc_approved":
+      logger.info(
+        {
+          userId: payload["userId"],
+          previousTier: payload["previousTier"],
+          newTier: payload["newTier"],
+          adminId: payload["adminId"],
+        },
+        "[fan-out] identity.kyc_approved — user KYC tier updated",
+      );
+      break;
+
     case "identity.kyc_requested":
       logger.info(
         {

@@ -17,6 +17,7 @@ import {
   publishIdentityUpdated,
   publishIdentitySuspended,
   publishKycRequested,
+  publishKycApproved,
 } from "../lib/events";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { logger } from "../lib/logger";
@@ -577,6 +578,70 @@ router.post("/admin/:userId/unsuspend", requireAdmin, async (req: Request, res: 
   logger.info({ adminId, targetId, username: user.username }, "Admin unsuspended user");
 
   res.json({ userId: targetId, username: user.username, suspended: null });
+});
+
+const setKycTierSchema = z.object({
+  tier: z.number().int().min(1).max(3),
+  note: z.string().max(500).optional(),
+});
+
+router.post("/admin/:userId/set-kyc-tier", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["userId"];
+  const targetId = Array.isArray(raw) ? raw[0]! : raw!;
+  const adminId = req.jwtPayload!.sub;
+
+  const parsed = setKycTierSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
+    return;
+  }
+
+  const { tier, note } = parsed.data;
+
+  const [user] = await db
+    .select({ id: raldUsersTable.id, username: raldUsersTable.username, kycTier: raldUsersTable.kycTier })
+    .from(raldUsersTable)
+    .where(eq(raldUsersTable.id, targetId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: `User "${targetId}" not found` });
+    return;
+  }
+
+  const previousTier = user.kycTier;
+
+  if (previousTier === tier) {
+    res.json({
+      userId: targetId,
+      username: user.username,
+      previousKycTier: previousTier,
+      kycTier: tier,
+      changed: false,
+      message: `User is already at KYC tier ${tier} — no change made`,
+    });
+    return;
+  }
+
+  await db
+    .update(raldUsersTable)
+    .set({ kycTier: tier, updatedAt: new Date() })
+    .where(eq(raldUsersTable.id, targetId));
+
+  await publishKycApproved(targetId, tier, previousTier, adminId).catch((err) =>
+    logger.error({ err }, "Event publish failed after admin KYC tier set"),
+  );
+
+  logger.info({ adminId, targetId, username: user.username, previousTier, newTier: tier, note }, "Admin set KYC tier");
+
+  res.json({
+    userId: targetId,
+    username: user.username,
+    previousKycTier: previousTier,
+    kycTier: tier,
+    changed: true,
+    message: `KYC tier updated from ${previousTier} to ${tier}`,
+  });
 });
 
 const setRoleSchema = z.object({

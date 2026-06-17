@@ -958,6 +958,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/admin/{userId}/set-kyc-tier:
+    post:
+      operationId: adminSetKycTier
+      tags: [identity]
+      summary: Admin — set a user's KYC tier
+      description: |
+        Directly sets a user's `kycTier` to any value between 1 and 3.
+        Used by compliance reviewers to approve (or downgrade) after reviewing a `identity.kyc_requested` event.
+        Publishes `identity.kyc_approved` event on any change.
+        No-op (200) if the user is already at the requested tier.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: rld_8dj39sj29k
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetKycTierRequest"
+            examples:
+              approve_tier2:
+                value:
+                  tier: 2
+                  note: Documents verified — national ID and utility bill accepted
+      responses:
+        "200":
+          description: KYC tier updated (or already at requested tier)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetKycTierResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/admin/{userId}/suspend:
     post:
       operationId: adminSuspendUser
@@ -1855,6 +1909,54 @@ components:
         - senderBalance
         - transaction
         - to
+
+    SetKycTierRequest:
+      type: object
+      properties:
+        tier:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: The KYC tier to set on the user (1 = basic, 2 = verified, 3 = enhanced)
+          example: 2
+        note:
+          type: string
+          maxLength: 500
+          description: Optional compliance note recorded in the event payload
+          example: Documents verified — national ID and utility bill accepted
+      required:
+        - tier
+
+    SetKycTierResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        previousKycTier:
+          type: integer
+          example: 1
+        kycTier:
+          type: integer
+          description: The tier now in effect
+          example: 2
+        changed:
+          type: boolean
+          description: false when the tier was already at the requested value
+          example: true
+        message:
+          type: string
+          example: KYC tier updated from 1 to 2
+      required:
+        - userId
+        - username
+        - previousKycTier
+        - kycTier
+        - changed
+        - message
 
     KycDocument:
       type: object
