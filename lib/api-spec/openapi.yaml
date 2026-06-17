@@ -1,0 +1,467 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 1.0.0
+  description: |
+    RALD Platform Identity Service API.
+    Provides universal identity for all RALD products (PayRald, Messenger, Elimu, ALIA, Mail, Dispatch, Control Center).
+    Every user receives a RALD UUID, ALIA handle, wallet ID, and RALD email address on signup.
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: identity
+    description: Universal RALD Identity — authentication and profile management
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /identity/signup:
+    post:
+      operationId: identitySignup
+      tags: [identity]
+      summary: Create a new RALD identity
+      description: |
+        Creates a unified RALD identity. On success, automatically provisions:
+        - RALD UUID (`rld_xxxxxxxxxx`)
+        - ALIA alias handle (`username@rald`)
+        - RALD email address (`username@rald.cloud`)
+        - Wallet ID (`wallet_rld_xxxxxxxxxx`)
+        Publishes `identity.created`, `alias.provision_requested`, `wallet.provision_requested`,
+        and `mail.provision_requested` events to the RALD Event Bus.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+            examples:
+              basic:
+                summary: Standard signup
+                value:
+                  username: boyd
+                  email: boyd@example.com
+                  password: MySecurePass123
+      responses:
+        "201":
+          description: Identity created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "409":
+          description: Username or email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /identity/login:
+    post:
+      operationId: identityLogin
+      tags: [identity]
+      summary: Authenticate a RALD identity
+      description: |
+        Authenticates with email and password. Returns a signed JWT (HS256, 1-hour TTL)
+        and the full user profile. The JWT `sub` field is the RALD UUID.
+        Token should be stored in memory (not localStorage) by the consuming product.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              basic:
+                summary: Email + password login
+                value:
+                  email: boyd@example.com
+                  password: MySecurePass123
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Account suspended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /identity/profile:
+    get:
+      operationId: identityGetProfile
+      tags: [identity]
+      summary: Get the authenticated user's RALD identity
+      description: Returns the full RALD identity record for the JWT holder.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RALDIdentity"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: identityUpdateProfile
+      tags: [identity]
+      summary: Update the authenticated user's profile
+      description: |
+        Updates mutable profile fields. Changing `username` also updates
+        `aliasHandle` (`username@rald`) and `raldEmail` (`username@rald.cloud`).
+        Publishes `identity.updated` event.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RALDIdentity"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /identity/activate-product:
+    post:
+      operationId: identityActivateProduct
+      tags: [identity]
+      summary: Activate a RALD product for the authenticated user
+      description: |
+        Marks a RALD product as activated for this identity. Idempotent — calling
+        with an already-activated product is a no-op. Supported products:
+        `payrald`, `messenger`, `elimu`, `dispatch`, `mail`, `alia`, `crm`, `control-center`.
+        Publishes `identity.updated` event with `activatedProduct` in payload.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateProductRequest"
+            examples:
+              payrald:
+                summary: Activate PayRald
+                value:
+                  product: payrald
+              messenger:
+                summary: Activate Messenger
+                value:
+                  product: messenger
+      responses:
+        "200":
+          description: Updated product list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivateProductResponse"
+        "400":
+          description: Validation error or unknown product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        RALD JWT — HS256 signed, 1-hour TTL.
+        Payload: `{ sub: "rld_xxxxxxxxxx", username: "boyd", email: "boyd@example.com", iat, exp }`
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    RALDIdentity:
+      type: object
+      description: A universal RALD identity record shared across all RALD products.
+      properties:
+        id:
+          type: string
+          description: RALD UUID — format `rld_xxxxxxxxxx`
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          description: Unique lowercase username (3–30 chars, alphanumeric + underscore)
+          example: boyd
+        email:
+          type: string
+          format: email
+          description: Registration email address
+          example: boyd@example.com
+        raldEmail:
+          type: string
+          nullable: true
+          description: Auto-provisioned RALD email address
+          example: boyd@rald.cloud
+        aliasHandle:
+          type: string
+          nullable: true
+          description: ALIA alias handle — used for payments, messaging, and routing
+          example: boyd@rald
+        walletId:
+          type: string
+          nullable: true
+          description: PayRald wallet ID — format `wallet_rld_xxxxxxxxxx`
+          example: wallet_rld_8dj39sj29k
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Platform trust score (0 = new, 100 = fully verified)
+          example: 0
+        kycTier:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: KYC verification tier (1 = basic, 2 = verified, 3 = enhanced)
+          example: 1
+        activatedProducts:
+          type: array
+          items:
+            type: string
+          description: List of RALD products this identity has activated
+          example: [payrald, messenger]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - username
+        - email
+        - trustScore
+        - kycTier
+        - activatedProducts
+        - createdAt
+        - updatedAt
+
+    AuthResponse:
+      type: object
+      description: Successful authentication response
+      properties:
+        token:
+          type: string
+          description: Signed JWT (HS256, 1-hour TTL). Store in memory — NOT in localStorage.
+        expiresIn:
+          type: integer
+          description: Token TTL in seconds
+          example: 3600
+        user:
+          $ref: "#/components/schemas/RALDIdentity"
+      required:
+        - token
+        - expiresIn
+        - user
+
+    SignupRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: "^[a-z0-9_]+$"
+          description: Lowercase alphanumeric + underscore only
+          example: boyd
+        email:
+          type: string
+          format: email
+          example: boyd@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Minimum 8 characters
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Optional display name
+      required:
+        - username
+        - email
+        - password
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: boyd@example.com
+        password:
+          type: string
+          minLength: 1
+      required:
+        - email
+        - password
+
+    UpdateProfileRequest:
+      type: object
+      description: At least one field must be provided
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: "^[a-z0-9_]+$"
+          description: Changing username also updates aliasHandle and raldEmail
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+
+    ActivateProductRequest:
+      type: object
+      properties:
+        product:
+          type: string
+          enum:
+            - payrald
+            - messenger
+            - elimu
+            - dispatch
+            - mail
+            - alia
+            - crm
+            - control-center
+          description: RALD product to activate
+          example: payrald
+      required:
+        - product
+
+    ActivateProductResponse:
+      type: object
+      properties:
+        activatedProducts:
+          type: array
+          items:
+            type: string
+          description: Updated list of all activated products
+          example: [payrald, messenger]
+      required:
+        - activatedProducts
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        reason:
+          type: string
+          description: Machine-readable reason code (optional)
+      required:
+        - error
+
+    ValidationError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Validation failed
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: array
+                items:
+                  type: string
+              message:
+                type: string
+      required:
+        - error
+        - issues

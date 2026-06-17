@@ -1,0 +1,265 @@
+REPLIT MASTER SPRINT — RALD PLATFORM INTEGRATION
+
+Mission
+
+Transform RALD from independent products into a unified ecosystem.
+
+Current products:
+
+* RALD Identity
+* ALIA
+* PayRald
+* RALD Mail
+* Elimu
+* Loop Messenger
+* Loop Business
+* Dispatch
+* Control Center
+
+All products must now share:
+
+* Authentication
+* Identity
+* Payments
+* Messaging
+* Mail
+* Event Bus
+
+⸻
+
+Phase 1 — RALD Identity Everywhere
+
+Create a universal identity layer.
+
+Every user receives:
+
+* RALD UUID
+* Username
+* Email
+* Profile
+* Trust Score
+
+Example:
+
+username: boyd
+
+RALD UUID:
+rld_8dj39sj29
+
+RALD Email:
+boyd@rald.cloud
+
+ALIA Handle:
+boyd@rald
+
+Every product uses the same identity.
+
+No product stores separate users.
+
+⸻
+
+Phase 2 — ALIA Universal Routing
+
+ALIA becomes the routing engine.
+
+Supported aliases:
+
+* username@rald
+* email
+* phone
+* business handle
+* school handle
+
+Examples:
+
+boyd@rald
+
+lagosacademy@rald
+
+dispatch@rald
+
+merchant@rald
+
+All products resolve through ALIA.
+
+⸻
+
+Phase 3 — PayRald Wallet Layer
+
+Every identity automatically receives:
+
+Wallet ID
+
+Example:
+
+wallet_rld_8dj39sj29
+
+Functions:
+
+* Internal transfers
+* Wallet balance
+* Voucher purchases
+* Merchant payments
+* School payments
+
+No visible bank account numbers.
+
+Bank accounts remain hidden infrastructure.
+
+⸻
+
+Phase 4 — RALD Mail Provisioning
+
+Every organization can provision mail.
+
+Supported:
+
+Businesses
+
+Schools
+
+Universities
+
+Government agencies
+
+Examples:
+
+student@lagosacademy.elimu.africa
+
+teacher@lagosacademy.elimu.africa
+
+admin@business.rald.cloud
+
+Provision automatically from admin dashboards.
+
+⸻
+
+Phase 5 — Elimu Integration
+
+When a school registers:
+
+Automatically create:
+
+School Profile
+
+School Mail Domain
+
+ALIA Organization Handle
+
+School Wallet
+
+Student Mailboxes
+
+Teacher Mailboxes
+
+Parent Accounts
+
+Student identity becomes permanent.
+
+Students can later upgrade into normal RALD accounts.
+
+⸻
+
+Phase 6 — Messenger Integration
+
+Messenger uses RALD Identity.
+
+No separate user table.
+
+Support:
+
+* User DM
+* Business chat
+* School chat
+* Merchant chat
+
+Payments inside conversations:
+
+Send Money
+
+Request Money
+
+Pay Merchant
+
+using ALIA aliases.
+
+⸻
+
+Phase 7 — Event Bus
+
+Every product publishes events.
+
+Examples:
+
+identity.created
+
+wallet.created
+
+school.created
+
+mailbox.created
+
+transfer.completed
+
+merchant.onboarded
+
+message.sent
+
+Events flow through RALD Event Bus.
+
+⸻
+
+Phase 8 — Control Center
+
+Control Center becomes the command plane.
+
+Manage:
+
+Users
+
+Schools
+
+Businesses
+
+Wallets
+
+Aliases
+
+Domains
+
+Mail
+
+Messenger
+
+Trust Scores
+
+Events
+
+Feature Flags
+
+⸻
+
+Deliverables
+
+1. Shared Identity SDK
+2. Shared ALIA SDK
+3. Shared Wallet SDK
+4. Shared Mail SDK
+5. Shared Event SDK
+6. Unified Navigation
+7. Cross-product user provisioning
+8. Cross-product organization provisioning
+
+Success Metric:
+
+A school can register once and automatically receive:
+
+* School profile
+* Wallet
+* ALIA handle
+* Mail domain
+* Student mailboxes
+* Parent accounts
+* Messenger workspace
+
+without manual intervention.
