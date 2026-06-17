@@ -878,6 +878,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/{username}/profile:
+    get:
+      operationId: identityPublicProfile
+      tags: [identity]
+      summary: Get a user's public profile by username
+      description: |
+        Returns publicly visible fields for any non-suspended RALD identity.
+        No authentication required — intended for user discovery across RALD products.
+        Does not expose email, wallet balance, role, or suspension status.
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The RALD username to look up (case-insensitive)
+          example: boyd
+      responses:
+        "200":
+          description: Public profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProfile"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/admin/{userId}/suspend:
     post:
       operationId: adminSuspendUser
@@ -1775,6 +1806,51 @@ components:
         - senderBalance
         - transaction
         - to
+
+    PublicProfile:
+      type: object
+      description: |
+        Publicly visible fields for a RALD identity.
+        Never includes email, password hash, wallet ID, role, or suspension status.
+      properties:
+        username:
+          type: string
+          example: boyd
+        raldEmail:
+          type: string
+          nullable: true
+          description: RALD-provisioned email address
+          example: boyd@rald.cloud
+        aliasHandle:
+          type: string
+          nullable: true
+          description: Primary ALIA routing handle
+          example: boyd@rald
+        activatedProducts:
+          type: array
+          items:
+            type: string
+          description: RALD products this user has activated
+          example: [payrald, messenger]
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 0
+        kycTier:
+          type: integer
+          minimum: 1
+          maximum: 3
+          example: 1
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - username
+        - activatedProducts
+        - trustScore
+        - kycTier
+        - createdAt
 
     SuspendRequest:
       type: object

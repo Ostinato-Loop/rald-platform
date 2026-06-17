@@ -402,6 +402,32 @@ router.get("/admin", requireAdmin, async (req: Request, res: Response) => {
   });
 });
 
+router.get("/:username/profile", async (req: Request, res: Response) => {
+  const raw = req.params["username"];
+  const username = (Array.isArray(raw) ? raw[0]! : raw!).toLowerCase().trim();
+
+  const [user] = await db
+    .select({
+      username: raldUsersTable.username,
+      raldEmail: raldUsersTable.raldEmail,
+      aliasHandle: raldUsersTable.aliasHandle,
+      activatedProducts: raldUsersTable.activatedProducts,
+      trustScore: raldUsersTable.trustScore,
+      kycTier: raldUsersTable.kycTier,
+      createdAt: raldUsersTable.createdAt,
+    })
+    .from(raldUsersTable)
+    .where(eq(raldUsersTable.username, username))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: `User "${username}" not found` });
+    return;
+  }
+
+  res.json(user);
+});
+
 const adminSuspendSchema = z.object({
   reason: z.string().min(1).max(500),
 });
