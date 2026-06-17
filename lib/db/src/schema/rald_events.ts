@@ -19,6 +19,8 @@ export const raldEventsTable = pgTable("rald_events", {
   payload: jsonb("payload").notNull().default({}),
   processed: boolean("processed").notNull().default(false),
   processedAt: timestamp("processed_at", { withTimezone: true }),
+  error: text("error"),
+  retries: text("retries").notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

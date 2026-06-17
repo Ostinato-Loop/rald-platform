@@ -17,6 +17,8 @@ tags:
     description: Universal RALD Identity — authentication and profile management
   - name: alia
     description: ALIA Universal Routing — resolve and manage RALD alias handles
+  - name: events
+    description: RALD Event Bus — observe and manage the internal event stream
 
 paths:
   /healthz:
@@ -191,6 +193,117 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /events:
+    get:
+      operationId: eventsList
+      tags: [events]
+      summary: List RALD events
+      description: Returns paginated events. Filterable by type and processed status. Requires auth.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [identity.created, identity.updated, identity.suspended, identity.reactivated, wallet.provision_requested, mail.provision_requested, alias.provision_requested]
+          description: Filter by event type
+        - name: processed
+          in: query
+          schema:
+            type: string
+            enum: ["true", "false"]
+          description: Filter by processed status
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Event list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventListResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /events/stats:
+    get:
+      operationId: eventsStats
+      tags: [events]
+      summary: Event bus statistics
+      description: Returns per-type counts of processed vs pending events.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventStatsResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /events/{id}/retry:
+    post:
+      operationId: eventsRetry
+      tags: [events]
+      summary: Re-queue a failed event for retry
+      description: Resets processed=false and retries=0 so the event bus worker will re-process the event.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Event queued for retry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  message:
+                    type: string
+                required: [ok, message]
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Event not found
           content:
             application/json:
               schema:
@@ -613,6 +726,92 @@ components:
       required:
         - error
         - issues
+
+    RALDEvent:
+      type: object
+      description: A RALD Event Bus record
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [identity.created, identity.updated, identity.suspended, identity.reactivated, wallet.provision_requested, mail.provision_requested, alias.provision_requested]
+        producer:
+          type: string
+          example: rald-identity
+        payload:
+          type: object
+          additionalProperties: true
+        processed:
+          type: boolean
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+          nullable: true
+          description: Error message if processing failed
+        retries:
+          type: string
+          description: Number of processing attempts as a string
+          example: "0"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - type
+        - producer
+        - payload
+        - processed
+        - retries
+        - createdAt
+
+    EventListResponse:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/RALDEvent"
+        total:
+          type: integer
+          description: Total matching events (for pagination)
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required:
+        - events
+        - total
+        - limit
+        - offset
+
+    EventStatsResponse:
+      type: object
+      properties:
+        byType:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              total:
+                type: integer
+              processed:
+                type: integer
+              pending:
+                type: integer
+            required: [total, processed, pending]
+        totalPending:
+          type: integer
+        totalProcessed:
+          type: integer
+      required:
+        - byType
+        - totalPending
+        - totalProcessed
 
     AliasResolution:
       type: object
