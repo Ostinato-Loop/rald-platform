@@ -22,3 +22,10 @@ export {
   useRALDIdentityContext,
 } from "./context/RALDIdentityProvider";
 export type { RALDIdentityProviderProps } from "./context/RALDIdentityProvider";
+
+export { useALIAResolve, setALIABaseUrl } from "./hooks/useALIAResolve";
+export type {
+  AliasResolution,
+  AliasResolveResult,
+  UseALIAResolveReturn,
+} from "./hooks/useALIAResolve";

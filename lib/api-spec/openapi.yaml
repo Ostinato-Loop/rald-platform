@@ -15,6 +15,8 @@ tags:
     description: Health operations
   - name: identity
     description: Universal RALD Identity — authentication and profile management
+  - name: alia
+    description: ALIA Universal Routing — resolve and manage RALD alias handles
 
 paths:
   /healthz:
@@ -189,6 +191,152 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Username already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /alia/resolve/{alias}:
+    get:
+      operationId: aliaResolve
+      tags: [alia]
+      summary: Resolve a RALD alias handle
+      description: |
+        Public endpoint — no authentication required.
+        Resolves any active ALIA alias (e.g. `boyd@rald`) to its full identity resolution:
+        wallet ID, username, RALD email, trust score, and KYC tier.
+      parameters:
+        - name: alias
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ALIA handle to resolve, e.g. `boyd@rald`
+          example: boyd@rald
+      responses:
+        "200":
+          description: Alias resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AliasResolveResponse"
+        "404":
+          description: Alias not found or inactive
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /alia/aliases:
+    get:
+      operationId: aliaListAliases
+      tags: [alia]
+      summary: List all aliases for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Alias list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AliasListResponse"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      operationId: aliaCreateAlias
+      tags: [alia]
+      summary: Create an additional alias for the authenticated user
+      description: |
+        Creates a new RALD alias pointing to the authenticated user's identity.
+        The alias must be in the format `handle@rald`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAliasRequest"
+            examples:
+              business:
+                summary: Business alias
+                value:
+                  alias: boydtech@rald
+                  aliasType: business
+      responses:
+        "201":
+          description: Alias created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RALDAlias"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Alias already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /alia/aliases/{id}/status:
+    patch:
+      operationId: aliaUpdateAliasStatus
+      tags: [alia]
+      summary: Update the status of an alias
+      description: Set an alias to active, suspended, or archived.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAliasStatusRequest"
+      responses:
+        "200":
+          description: Alias updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RALDAlias"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Alias not found
           content:
             application/json:
               schema:
@@ -465,3 +613,135 @@ components:
       required:
         - error
         - issues
+
+    AliasResolution:
+      type: object
+      description: The resolved identity data behind an ALIA alias handle
+      properties:
+        walletId:
+          type: string
+          nullable: true
+          description: PayRald wallet ID
+          example: wallet_rld_8dj39sj29k
+        username:
+          type: string
+          description: RALD username
+          example: boyd
+        raldEmail:
+          type: string
+          nullable: true
+          description: RALD email address
+          example: boyd@rald.cloud
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Platform trust score
+          example: 0
+        kycTier:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: KYC verification tier
+          example: 1
+      required:
+        - username
+        - trustScore
+        - kycTier
+
+    RALDAlias:
+      type: object
+      description: A RALD alias record in the ALIA routing table
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Alias UUID
+        alias:
+          type: string
+          description: The alias handle, e.g. boyd@rald
+          example: boyd@rald
+        aliasType:
+          type: string
+          enum: [username, rald_email, phone, email, business, school]
+          description: The type of alias
+          example: username
+        userId:
+          type: string
+          description: The RALD UUID of the owning user
+          example: rld_8dj39sj29k
+        status:
+          type: string
+          enum: [active, suspended, pending, archived]
+          example: active
+        resolvedTo:
+          $ref: "#/components/schemas/AliasResolution"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - alias
+        - aliasType
+        - userId
+        - status
+        - resolvedTo
+        - createdAt
+        - updatedAt
+
+    AliasResolveResponse:
+      type: object
+      properties:
+        alias:
+          type: string
+          example: boyd@rald
+        aliasType:
+          type: string
+          example: username
+        resolvedTo:
+          $ref: "#/components/schemas/AliasResolution"
+      required:
+        - alias
+        - aliasType
+        - resolvedTo
+
+    AliasListResponse:
+      type: object
+      properties:
+        aliases:
+          type: array
+          items:
+            $ref: "#/components/schemas/RALDAlias"
+      required:
+        - aliases
+
+    CreateAliasRequest:
+      type: object
+      properties:
+        alias:
+          type: string
+          pattern: "^[a-z0-9_.]+@rald$"
+          description: The alias handle — must end in @rald
+          example: boydtech@rald
+        aliasType:
+          type: string
+          enum: [username, rald_email, phone, email, business, school]
+          description: The type of alias to create
+          example: business
+      required:
+        - alias
+        - aliasType
+
+    UpdateAliasStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [active, suspended, archived]
+          description: New status for the alias
+          example: archived
+      required:
+        - status

@@ -1,7 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { eq, or } from "drizzle-orm";
-import { db, raldUsersTable } from "@workspace/db";
+import { db, raldUsersTable, raldAliasesTable } from "@workspace/db";
+import type { AliasResolution } from "@workspace/db";
 import {
   generateRaldId,
   buildWalletId,
@@ -113,6 +114,25 @@ router.post("/signup", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to create user" });
     return;
   }
+
+  const aliasResolution: AliasResolution = {
+    walletId: user.walletId,
+    username: user.username,
+    raldEmail: user.raldEmail,
+    trustScore: user.trustScore ?? 0,
+    kycTier: user.kycTier ?? 1,
+  };
+
+  await db
+    .insert(raldAliasesTable)
+    .values({
+      alias: aliasHandle,
+      aliasType: "username",
+      userId: user.id,
+      status: "active",
+      resolvedTo: aliasResolution,
+    })
+    .catch((err) => logger.error({ err }, "Failed to create primary ALIA alias after signup"));
 
   await publishIdentityCreated(user).catch((err) =>
     logger.error({ err }, "Event publish failed after signup"),
