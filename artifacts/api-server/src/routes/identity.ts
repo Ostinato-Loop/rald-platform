@@ -18,6 +18,7 @@ import {
   publishIdentitySuspended,
   publishKycRequested,
   publishKycApproved,
+  publishTrustUpdated,
 } from "../lib/events";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { logger } from "../lib/logger";
@@ -710,6 +711,65 @@ router.post("/admin/:userId/set-kyc-tier", requireAdmin, async (req: Request, re
     kycTier: tier,
     changed: true,
     message: `KYC tier updated from ${previousTier} to ${tier}`,
+  });
+});
+
+const adjustTrustScoreSchema = z.object({
+  delta: z.number().int().min(-100).max(100),
+  reason: z.string().min(1).max(500),
+});
+
+router.post("/admin/:userId/adjust-trust-score", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["userId"];
+  const targetId = Array.isArray(raw) ? raw[0]! : raw!;
+  const adminId = req.jwtPayload!.sub;
+
+  const parsed = adjustTrustScoreSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
+    return;
+  }
+
+  const { delta, reason } = parsed.data;
+
+  const [user] = await db
+    .select({ id: raldUsersTable.id, username: raldUsersTable.username, trustScore: raldUsersTable.trustScore })
+    .from(raldUsersTable)
+    .where(eq(raldUsersTable.id, targetId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: `User "${targetId}" not found` });
+    return;
+  }
+
+  const previousScore = user.trustScore;
+  const rawNext = previousScore + delta;
+  const newScore = Math.min(100, Math.max(0, rawNext));
+  const effectiveDelta = newScore - previousScore;
+
+  await db
+    .update(raldUsersTable)
+    .set({ trustScore: newScore, updatedAt: new Date() })
+    .where(eq(raldUsersTable.id, targetId));
+
+  await publishTrustUpdated(targetId, previousScore, newScore, delta, reason, adminId).catch((err) =>
+    logger.error({ err }, "Event publish failed after trust score adjustment"),
+  );
+
+  logger.info(
+    { adminId, targetId, username: user.username, previousScore, newScore, delta, effectiveDelta, reason },
+    "Admin adjusted trust score",
+  );
+
+  res.json({
+    userId: targetId,
+    username: user.username,
+    previousTrustScore: previousScore,
+    trustScore: newScore,
+    delta,
+    effectiveDelta,
+    reason,
   });
 });
 

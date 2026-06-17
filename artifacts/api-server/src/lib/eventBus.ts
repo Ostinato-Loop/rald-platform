@@ -122,6 +122,19 @@ async function dispatch(event: RaldEvent): Promise<void> {
       logger.info({ userId: payload["userId"] }, "[fan-out] identity.reactivated received");
       break;
 
+    case "identity.trust_updated":
+      logger.info(
+        {
+          userId: payload["userId"],
+          previousScore: payload["previousScore"],
+          newScore: payload["newScore"],
+          delta: payload["delta"],
+          adminId: payload["adminId"],
+        },
+        "[fan-out] identity.trust_updated — user trust score adjusted",
+      );
+      break;
+
     case "identity.kyc_approved":
       logger.info(
         {

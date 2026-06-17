@@ -958,6 +958,68 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/admin/{userId}/adjust-trust-score:
+    post:
+      operationId: adminAdjustTrustScore
+      tags: [identity]
+      summary: Admin — adjust a user's trust score
+      description: |
+        Increments or decrements a user's `trustScore` by a given `delta`.
+        The result is clamped to the valid range [0, 100].
+
+        - Positive `delta` → increase trust (e.g. good behaviour, verified documents)
+        - Negative `delta` → decrease trust (e.g. fraud signals, policy violations)
+
+        Publishes `identity.trust_updated` event on every call (even zero-change due to clamping).
+        The `reason` is recorded in the event payload for the audit trail.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: rld_8dj39sj29k
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustTrustScoreRequest"
+            examples:
+              increase:
+                value:
+                  delta: 10
+                  reason: KYC tier 2 documents verified
+              decrease:
+                value:
+                  delta: -25
+                  reason: Disputed transaction — chargeback initiated
+      responses:
+        "200":
+          description: Trust score adjusted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdjustTrustScoreResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/admin/kyc/pending:
     get:
       operationId: adminKycPendingQueue
@@ -1966,6 +2028,67 @@ components:
         - senderBalance
         - transaction
         - to
+
+    AdjustTrustScoreRequest:
+      type: object
+      properties:
+        delta:
+          type: integer
+          minimum: -100
+          maximum: 100
+          description: |
+            Amount to add to (positive) or subtract from (negative) the current trust score.
+            The result is clamped to [0, 100] — passing +100 will never exceed 100.
+          example: 10
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Human-readable reason recorded in the event audit trail
+          example: KYC tier 2 documents verified
+      required:
+        - delta
+        - reason
+
+    AdjustTrustScoreResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        previousTrustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 40
+        trustScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: The new trust score after clamping
+          example: 50
+        delta:
+          type: integer
+          description: The delta that was applied (as supplied)
+          example: 10
+        effectiveDelta:
+          type: integer
+          description: The actual change after clamping (may differ from delta if clamped)
+          example: 10
+        reason:
+          type: string
+          example: KYC tier 2 documents verified
+      required:
+        - userId
+        - username
+        - previousTrustScore
+        - trustScore
+        - delta
+        - effectiveDelta
+        - reason
 
     KycPendingUser:
       type: object

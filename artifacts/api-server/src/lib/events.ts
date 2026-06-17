@@ -76,6 +76,25 @@ export async function publishIdentitySuspended(userId: string, reason: string): 
   });
 }
 
+export async function publishTrustUpdated(
+  userId: string,
+  previousScore: number,
+  newScore: number,
+  delta: number,
+  reason: string,
+  adminId: string,
+): Promise<void> {
+  await publishEvent("identity.trust_updated", {
+    userId,
+    previousScore,
+    newScore,
+    delta,
+    reason,
+    adminId,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 export async function publishKycApproved(
   userId: string,
   newTier: number,

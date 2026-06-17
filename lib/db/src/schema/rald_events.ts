@@ -7,6 +7,7 @@ export const RALD_EVENT_TYPES = [
   "identity.reactivated",
   "identity.kyc_requested",
   "identity.kyc_approved",
+  "identity.trust_updated",
   "wallet.provision_requested",
   "mail.provision_requested",
   "alias.provision_requested",
