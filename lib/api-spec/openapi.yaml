@@ -324,6 +324,136 @@ paths:
               schema:
                 $ref: "#/components/schemas/InsufficientFundsError"
 
+  /wallet/admin/{walletId}:
+    get:
+      operationId: adminWalletGet
+      tags: [wallet]
+      summary: Admin — inspect any wallet by ID
+      description: Returns the wallet record plus its 20 most recent transactions. Requires admin role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: walletId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The wallet ID to inspect (format `wallet_rld_xxxxxxxxxx`)
+          example: wallet_rld_8dj39sj29k
+      responses:
+        "200":
+          description: Wallet with recent transactions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWalletResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wallet/admin/{walletId}/freeze:
+    post:
+      operationId: adminWalletFreeze
+      tags: [wallet]
+      summary: Admin — freeze a wallet
+      description: |
+        Freezes a wallet, preventing all debits, credits, and transfers.
+        Idempotent — returns 200 if already frozen.
+        Cannot freeze a closed wallet.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: walletId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: wallet_rld_8dj39sj29k
+      responses:
+        "200":
+          description: Wallet frozen (or was already frozen)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWalletActionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Cannot freeze a closed wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wallet/admin/{walletId}/unfreeze:
+    post:
+      operationId: adminWalletUnfreeze
+      tags: [wallet]
+      summary: Admin — unfreeze a wallet
+      description: |
+        Restores a frozen wallet to active status.
+        Idempotent — returns 200 if already active.
+        Cannot unfreeze a closed wallet.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: walletId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: wallet_rld_8dj39sj29k
+      responses:
+        "200":
+          description: Wallet unfrozen (or was already active)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminWalletActionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Wallet not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Cannot unfreeze a closed wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /wallet/transfer:
     post:
       operationId: walletTransfer
@@ -1323,6 +1453,34 @@ components:
         - senderBalance
         - transaction
         - to
+
+    AdminWalletResponse:
+      type: object
+      description: Admin wallet inspection — wallet record plus recent transaction history.
+      properties:
+        wallet:
+          $ref: "#/components/schemas/RALDWallet"
+        recentTransactions:
+          type: array
+          description: Up to 20 most recent transactions, newest first.
+          items:
+            $ref: "#/components/schemas/RALDTransaction"
+      required:
+        - wallet
+        - recentTransactions
+
+    AdminWalletActionResponse:
+      type: object
+      description: Result of a freeze or unfreeze admin action.
+      properties:
+        message:
+          type: string
+          example: Wallet frozen
+        wallet:
+          $ref: "#/components/schemas/RALDWallet"
+      required:
+        - message
+        - wallet
 
     InsufficientFundsError:
       type: object

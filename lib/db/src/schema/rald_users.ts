@@ -1,5 +1,8 @@
 import { pgTable, text, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 
+export const USER_ROLES = ["user", "admin"] as const;
+export type UserRole = (typeof USER_ROLES)[number];
+
 export const raldUsersTable = pgTable("rald_users", {
   id: text("id").primaryKey(),
   username: text("username").notNull().unique(),
@@ -8,6 +11,7 @@ export const raldUsersTable = pgTable("rald_users", {
   raldEmail: text("rald_email").unique(),
   aliasHandle: text("alias_handle").unique(),
   walletId: text("wallet_id").unique(),
+  role: text("role").$type<UserRole>().notNull().default("user"),
   trustScore: integer("trust_score").notNull().default(0),
   kycTier: integer("kyc_tier").notNull().default(1),
   activatedProducts: jsonb("activated_products")

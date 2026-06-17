@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { eq, desc } from "drizzle-orm";
 import { db, raldWalletsTable, raldTransactionsTable, raldAliasesTable } from "@workspace/db";
-import { requireAuth } from "../middlewares/auth";
+import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { logger } from "../lib/logger";
 import crypto from "crypto";
 
@@ -317,6 +317,109 @@ router.post("/transfer", requireAuth, async (req: Request, res: Response) => {
     transaction: outTx,
     to: aliasLookup,
   });
+});
+
+router.get("/admin/:walletId", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["walletId"];
+  const walletId = Array.isArray(raw) ? raw[0]! : raw!;
+
+  const [wallet] = await db
+    .select()
+    .from(raldWalletsTable)
+    .where(eq(raldWalletsTable.id, walletId))
+    .limit(1);
+
+  if (!wallet) {
+    res.status(404).json({ error: `Wallet "${walletId}" not found` });
+    return;
+  }
+
+  const txs = await db
+    .select()
+    .from(raldTransactionsTable)
+    .where(eq(raldTransactionsTable.walletId, walletId))
+    .orderBy(desc(raldTransactionsTable.createdAt))
+    .limit(20);
+
+  res.json({ wallet, recentTransactions: txs });
+});
+
+router.post("/admin/:walletId/freeze", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["walletId"];
+  const walletId = Array.isArray(raw) ? raw[0]! : raw!;
+
+  const [wallet] = await db
+    .select()
+    .from(raldWalletsTable)
+    .where(eq(raldWalletsTable.id, walletId))
+    .limit(1);
+
+  if (!wallet) {
+    res.status(404).json({ error: `Wallet "${walletId}" not found` });
+    return;
+  }
+
+  if (wallet.status === "closed") {
+    res.status(422).json({ error: "Cannot freeze a closed wallet" });
+    return;
+  }
+
+  if (wallet.status === "frozen") {
+    res.json({ message: "Wallet is already frozen", wallet });
+    return;
+  }
+
+  const [updated] = await db
+    .update(raldWalletsTable)
+    .set({ status: "frozen", updatedAt: new Date() })
+    .where(eq(raldWalletsTable.id, walletId))
+    .returning();
+
+  logger.info(
+    { adminId: req.jwtPayload!.sub, walletId },
+    "Admin froze wallet",
+  );
+
+  res.json({ message: "Wallet frozen", wallet: updated });
+});
+
+router.post("/admin/:walletId/unfreeze", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.params["walletId"];
+  const walletId = Array.isArray(raw) ? raw[0]! : raw!;
+
+  const [wallet] = await db
+    .select()
+    .from(raldWalletsTable)
+    .where(eq(raldWalletsTable.id, walletId))
+    .limit(1);
+
+  if (!wallet) {
+    res.status(404).json({ error: `Wallet "${walletId}" not found` });
+    return;
+  }
+
+  if (wallet.status === "closed") {
+    res.status(422).json({ error: "Cannot unfreeze a closed wallet" });
+    return;
+  }
+
+  if (wallet.status === "active") {
+    res.json({ message: "Wallet is already active", wallet });
+    return;
+  }
+
+  const [updated] = await db
+    .update(raldWalletsTable)
+    .set({ status: "active", updatedAt: new Date() })
+    .where(eq(raldWalletsTable.id, walletId))
+    .returning();
+
+  logger.info(
+    { adminId: req.jwtPayload!.sub, walletId },
+    "Admin unfroze wallet",
+  );
+
+  res.json({ message: "Wallet unfrozen", wallet: updated });
 });
 
 export default router;

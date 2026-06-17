@@ -138,7 +138,7 @@ router.post("/signup", async (req: Request, res: Response) => {
     logger.error({ err }, "Event publish failed after signup"),
   );
 
-  const token = signJwt({ sub: user.id, username: user.username, email: user.email });
+  const token = signJwt({ sub: user.id, username: user.username, email: user.email, role: user.role ?? "user" });
 
   res.status(201).json({
     token,
@@ -178,7 +178,7 @@ router.post("/login", async (req: Request, res: Response) => {
     return;
   }
 
-  const token = signJwt({ sub: user.id, username: user.username, email: user.email });
+  const token = signJwt({ sub: user.id, username: user.username, email: user.email, role: user.role ?? "user" });
 
   res.json({
     token,
