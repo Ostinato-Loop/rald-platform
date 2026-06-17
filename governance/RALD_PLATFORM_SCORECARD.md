@@ -194,3 +194,30 @@ Each dimension scored 0–100. Target: ≥ 80 across all dimensions for RALD REA
 - [ ] Achieve 80+ across all dimensions
 
 **Projected RALD READY date: 2026-08-01**
+
+---
+
+## UPDATE — 2026-06-17T13:30Z
+
+### CI/CD Breakthroughs Since Initial Assessment
+
+| Repo | Before | After | Fix Applied |
+|------|--------|-------|-------------|
+| rald-os | ❌ npm crash | ✅ Green | Public repo + yarn + npx wrangler |
+| rald-sdk | ❌ npm crash + TS errors | ✅ Green | Public repo + _get rename + trust.getProfile() |
+| rald-routing | ❌ TS errors | ✅ Green | JwtPayload.country + machine-jwt Uint8Array |
+| rald-notify | ❌ TS errors | ✅ Green | KVNamespace import + union catch |
+| rald-config | ✅ | ✅ | — |
+| rald-auth-core | ✅ | ✅ | — |
+| rald-auth-ui | ✅ | ✅ | — |
+| rald-identity | ✅ | ✅ | — |
+| rald-event-bus | ✅ | ✅ | — |
+| rald-control-center | ✅ | ✅ | — |
+| rald-admin | ❌ Project not found | 🔄 Fixing | wrangler pages project create |
+| rald-alia (GitLab) | ❌ Quota | ❌ Quota | Needs account-level CI credits |
+
+### Revised CI/CD Score: **71 → 82/100** (10 of 11 GitHub repos green)
+### Revised Average Score: **48 → 57/100**
+
+### One Remaining Blocker (External)
+GitLab sekanidev namespace CI compute quota exhausted. Fix: add compute credits at gitlab.com/sekanidev billing or register a self-hosted runner. Cannot be resolved via YAML changes.
