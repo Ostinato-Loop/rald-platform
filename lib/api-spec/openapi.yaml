@@ -878,6 +878,104 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/admin/{userId}/suspend:
+    post:
+      operationId: adminSuspendUser
+      tags: [identity]
+      summary: Admin — suspend a user account
+      description: |
+        Suspends a user, preventing them from logging in.
+        Idempotent — returns 200 with a message if already suspended.
+        Publishes `identity.suspended` event.
+        An admin cannot suspend themselves (returns 422).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: rld_8dj39sj29k
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuspendRequest"
+            examples:
+              example:
+                value:
+                  reason: Violation of terms of service — fraudulent activity
+      responses:
+        "200":
+          description: User suspended (or was already suspended)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuspendResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Admin tried to suspend themselves
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /identity/admin/{userId}/unsuspend:
+    post:
+      operationId: adminUnsuspendUser
+      tags: [identity]
+      summary: Admin — lift a suspension from a user account
+      description: |
+        Reinstates a suspended user.
+        Idempotent — returns 200 with a message if the user is not suspended.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: rld_8dj39sj29k
+      responses:
+        "200":
+          description: User unsuspended (or was not suspended)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnsuspendResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Admin privileges required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/admin/{userId}/set-role:
     post:
       operationId: adminSetUserRole
@@ -1677,6 +1775,61 @@ components:
         - senderBalance
         - transaction
         - to
+
+    SuspendRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Human-readable reason for the suspension (stored and returned on login attempts)
+          example: Violation of terms of service — fraudulent activity
+      required:
+        - reason
+
+    SuspendResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        suspended:
+          type: string
+          description: The suspension reason now in effect
+          example: Violation of terms of service — fraudulent activity
+        message:
+          type: string
+          description: Present only on idempotent no-op (already suspended)
+          example: User is already suspended
+      required:
+        - userId
+        - username
+
+    UnsuspendResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        suspended:
+          type: string
+          nullable: true
+          description: Always null after a successful unsuspend
+          example: null
+        message:
+          type: string
+          description: Present only on idempotent no-op (not suspended)
+          example: User is not suspended
+      required:
+        - userId
+        - username
 
     SetRoleRequest:
       type: object
