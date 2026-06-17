@@ -122,6 +122,18 @@ async function dispatch(event: RaldEvent): Promise<void> {
       logger.info({ userId: payload["userId"] }, "[fan-out] identity.reactivated received");
       break;
 
+    case "identity.kyc_requested":
+      logger.info(
+        {
+          userId: payload["userId"],
+          currentTier: payload["currentTier"],
+          requestedTier: payload["requestedTier"],
+          documentsCount: Array.isArray(payload["documents"]) ? payload["documents"].length : 0,
+        },
+        "[fan-out] identity.kyc_requested — queued for compliance review",
+      );
+      break;
+
     default:
       logger.warn({ type: event.type }, "Event bus: no handler for event type");
   }

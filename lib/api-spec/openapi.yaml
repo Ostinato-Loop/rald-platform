@@ -878,6 +878,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /identity/me/kyc/upgrade:
+    post:
+      operationId: kycUpgradeRequest
+      tags: [identity]
+      summary: Request a KYC tier upgrade
+      description: |
+        Submits a KYC upgrade request for the authenticated user.
+        Accepts one or more supporting document references and stores them on the user record.
+        Does **not** immediately bump `kycTier` — a compliance reviewer must approve
+        the request (tier is updated via an admin endpoint after review).
+
+        Tier progression: 1 → 2 → 3 (maximum tier is 3).
+        The endpoint is idempotent per tier; re-submitting while already at max tier (3) returns 422.
+
+        Publishes `identity.kyc_requested` event.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KycUpgradeRequest"
+            examples:
+              basic:
+                value:
+                  documents:
+                    - type: national_id
+                      reference: NGA-NIN-12345678901
+                    - type: utility_bill
+                      reference: NEPA-BILL-2026-05
+      responses:
+        "200":
+          description: KYC upgrade request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycUpgradeResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Already at maximum KYC tier (3)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /identity/{username}/profile:
     get:
       operationId: identityPublicProfile
@@ -1806,6 +1855,72 @@ components:
         - senderBalance
         - transaction
         - to
+
+    KycDocument:
+      type: object
+      description: A single supporting document submitted with a KYC upgrade request
+      properties:
+        type:
+          type: string
+          description: Document category (e.g. national_id, passport, utility_bill, bank_statement)
+          example: national_id
+        reference:
+          type: string
+          description: |
+            Opaque document reference — a file ID from an upload service,
+            a government ID number, or any string the caller treats as a pointer.
+          example: NGA-NIN-12345678901
+        submittedAt:
+          type: string
+          format: date-time
+          description: Set server-side at submission time
+      required:
+        - type
+        - reference
+
+    KycUpgradeRequest:
+      type: object
+      properties:
+        documents:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/KycDocument"
+          description: One or more supporting documents for this tier upgrade request
+      required:
+        - documents
+
+    KycUpgradeResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: rld_8dj39sj29k
+        username:
+          type: string
+          example: boyd
+        currentKycTier:
+          type: integer
+          description: The tier the user is currently verified at (unchanged until admin approval)
+          example: 1
+        requestedTier:
+          type: integer
+          description: The tier being requested (currentKycTier + 1)
+          example: 2
+        documentsSubmitted:
+          type: integer
+          description: Number of documents stored in this request
+          example: 2
+        message:
+          type: string
+          example: KYC upgrade to tier 2 submitted for review. You will be notified once approved.
+      required:
+        - userId
+        - username
+        - currentKycTier
+        - requestedTier
+        - documentsSubmitted
+        - message
 
     PublicProfile:
       type: object

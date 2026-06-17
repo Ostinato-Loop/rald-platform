@@ -16,6 +16,7 @@ import {
   publishIdentityCreated,
   publishIdentityUpdated,
   publishIdentitySuspended,
+  publishKycRequested,
 } from "../lib/events";
 import { requireAuth, requireAdmin } from "../middlewares/auth";
 import { logger } from "../lib/logger";
@@ -294,6 +295,73 @@ router.post("/activate-product", requireAuth, async (req: Request, res: Response
   );
 
   res.json({ activatedProducts: next });
+});
+
+const kycDocumentSchema = z.object({
+  type: z.string().min(1).max(100),
+  reference: z.string().min(1).max(500),
+});
+
+const kycUpgradeSchema = z.object({
+  documents: z.array(kycDocumentSchema).min(1).max(20),
+});
+
+router.post("/me/kyc/upgrade", requireAuth, async (req: Request, res: Response) => {
+  const userId = req.jwtPayload!.sub;
+
+  const parsed = kycUpgradeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Validation failed", issues: parsed.error.issues });
+    return;
+  }
+
+  const [user] = await db
+    .select({ id: raldUsersTable.id, username: raldUsersTable.username, kycTier: raldUsersTable.kycTier, kycDocuments: raldUsersTable.kycDocuments })
+    .from(raldUsersTable)
+    .where(eq(raldUsersTable.id, userId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: "Authenticated user not found" });
+    return;
+  }
+
+  if (user.kycTier >= 3) {
+    res.status(422).json({ error: "Already at maximum KYC tier (3). No further upgrade available." });
+    return;
+  }
+
+  const requestedTier = user.kycTier + 1;
+  const submittedAt = new Date().toISOString();
+
+  const newDocs = parsed.data.documents.map((d) => ({
+    type: d.type,
+    reference: d.reference,
+    submittedAt,
+  }));
+
+  const existingDocs = Array.isArray(user.kycDocuments) ? user.kycDocuments : [];
+  const allDocs = [...existingDocs, ...newDocs];
+
+  await db
+    .update(raldUsersTable)
+    .set({ kycDocuments: allDocs, updatedAt: new Date() })
+    .where(eq(raldUsersTable.id, userId));
+
+  await publishKycRequested(userId, user.kycTier, requestedTier, newDocs).catch((err) =>
+    logger.error({ err }, "Event publish failed after KYC upgrade request"),
+  );
+
+  logger.info({ userId, username: user.username, currentTier: user.kycTier, requestedTier, docsCount: newDocs.length }, "KYC upgrade requested");
+
+  res.json({
+    userId,
+    username: user.username,
+    currentKycTier: user.kycTier,
+    requestedTier,
+    documentsSubmitted: newDocs.length,
+    message: `KYC upgrade to tier ${requestedTier} submitted for review. You will be notified once approved.`,
+  });
 });
 
 router.post("/suspend", requireAuth, async (req: Request, res: Response) => {

@@ -75,3 +75,18 @@ export async function publishIdentitySuspended(userId: string, reason: string): 
     timestamp: new Date().toISOString(),
   });
 }
+
+export async function publishKycRequested(
+  userId: string,
+  currentTier: number,
+  requestedTier: number,
+  documents: { type: string; reference: string; submittedAt: string }[],
+): Promise<void> {
+  await publishEvent("identity.kyc_requested", {
+    userId,
+    currentTier,
+    requestedTier,
+    documents,
+    timestamp: new Date().toISOString(),
+  });
+}

@@ -18,6 +18,10 @@ export const raldUsersTable = pgTable("rald_users", {
     .$type<string[]>()
     .notNull()
     .default([]),
+  kycDocuments: jsonb("kyc_documents")
+    .$type<{ type: string; reference: string; submittedAt: string }[]>()
+    .notNull()
+    .default([]),
   suspended: text("suspended"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
